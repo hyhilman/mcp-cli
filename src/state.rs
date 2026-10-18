@@ -420,8 +420,7 @@ fn classify(def: &StateDef, success: bool, output: &str) -> (CliState, Option<St
     let last_line = output
         .lines()
         .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .last()
+        .rfind(|l| !l.is_empty())
         .map(|l| truncate(l, MAX_LINE_CHARS));
 
     if let Some(hit) = def.needs_login_if.iter().find(|p| output.contains(p.as_str())) {
