@@ -12,7 +12,7 @@ event.
 ## Quick start
 
 ```sh
-cargo install --path .
+cargo install --path .   # or a binary from GitHub Releases, or ghcr.io/hyhilman/mcp-cli
 mkdir -p ~/.config/mcp-cli
 cp examples/netbird.toml ~/.config/mcp-cli/config.toml
 mcp-cli check            # validate, list tools
@@ -150,3 +150,11 @@ text in its output, which catches expiry between health checks. When blocked:
   `include_login_url = true`.
 - Every command run is logged (tool, argv, exit code, duration) to stderr.
   `MCP_CLI_LOG=debug` gives more detail.
+
+## Releases
+
+Bumping `version` in `Cargo.toml` on `main` tags `v<version>`, builds the
+binaries once (Linux musl x86_64/arm64, macOS arm64/x86_64), attaches them to a
+GitHub release, and pushes a multi-arch image built from the same Linux
+binaries to `ghcr.io/hyhilman/mcp-cli`. The image has no CLIs in it; extend it
+with the ones your config wraps (see `Dockerfile.release`).
