@@ -1,0 +1,60 @@
+# NetBird VPN: health check, SSO login, and a few read-only commands.
+# Docs: docs/netbird.md
+
+[server]
+name = "netbird"
+
+[cli.netbird]
+bin = "netbird"
+description = "NetBird VPN"
+timeout_secs = 15
+
+# `netbird status` prints "Daemon status: NeedsLogin" when the SSO session
+# expired, and "Management: Connected" when the tunnel is up.
+[cli.netbird.health]
+run = ["status"]
+ok_if = ["Management: Connected"]
+needs_login_if = ["NeedsLogin", "SessionExpired", "LoginFailed"]
+every_secs = 60
+
+# Prints "Please do the SSO login in your browser. If your browser didn't
+# open automatically, use this URL to log in: https://..." and then waits.
+[cli.netbird.login]
+run = ["up", "--no-browser"]
+url_prefixes = ["https://"]
+timeout_secs = 600
+# Self-hosted IdPs that redirect to http://localhost:53000 / 54000 after
+# sign-in: lets the user paste that address back (netbird_login_complete).
+callback_ports = [53000, 54000]
+# Start the login as soon as the session expires and put the link in alerts.
+auto = false
+
+[cli.netbird.commands.peers]
+description = "Show this peer's connection state and every peer it can reach."
+run = ["status", "--detail"]
+read_only = true
+
+[cli.netbird.commands.peers_json]
+description = "Same as peers, as JSON."
+run = ["status", "--json"]
+read_only = true
+
+[cli.netbird.commands.networks]
+description = "List NetBird networks (routes) and which are selected."
+run = ["networks", "list"]
+read_only = true
+
+[cli.netbird.commands.select_network]
+description = "Select (enable) a NetBird network route."
+run = ["networks", "select", "{network}"]
+args.network = { enum = ["office", "staging"], description = "Network to enable" }
+
+# Optional alerts (Slack incoming webhook from an env var).
+# [[notify]]
+# kind = "slack"
+# url_env = "SLACK_WEBHOOK_URL"
+# on = ["needs_login", "ready"]
+
+# Optional MCP Events (signed webhooks to subscribers).
+# [events]
+# enabled = true

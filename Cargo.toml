@@ -1,0 +1,29 @@
+[package]
+name = "mcp-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.90"
+description = "Expose a fixed set of CLI commands as MCP tools, with health checks, SSO login and expiry events."
+repository = "https://github.com/hyhilman/mcp-cli"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "net", "signal", "process", "fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+toml = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+axum = "0.7"
+futures-util = "0.3"
+subtle = "2"
+regex = "1"
+base64 = "0.22"
+ring = "0.17"
+
+[profile.release]
+lto = true
+codegen-units = 1

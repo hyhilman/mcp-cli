@@ -1,0 +1,55 @@
+# AWS CLI behind IAM Identity Center (SSO). The profile is fixed here, so
+# the agent cannot switch account or role. Docs: docs/aws.md
+
+[cli.aws]
+bin = "aws"
+description = "AWS (prod, read-only)"
+timeout_secs = 60
+# The profile and region are pinned for every command, health check and login.
+env = { AWS_PROFILE = "prod-readonly", AWS_REGION = "ap-southeast-1", AWS_PAGER = "" }
+# HOME is needed to find ~/.aws/config and the SSO token cache.
+inherit_env = ["PATH", "HOME"]
+
+# Fails with "...run aws sso login..." / "Error loading SSO Token" when the
+# SSO session expired.
+[cli.aws.health]
+run = ["sts", "get-caller-identity", "--output", "json"]
+needs_login_if = ["aws sso login", "Error loading SSO Token", "Token has expired", "UnauthorizedSSOToken"]
+every_secs = 300
+
+# Device-code flow: prints a https://... link (with the code in it) and waits.
+[cli.aws.login]
+run = ["sso", "login", "--use-device-code", "--no-browser"]
+url_prefixes = ["https://"]
+timeout_secs = 600
+
+[cli.aws.commands.whoami]
+description = "Show the AWS account and role in use."
+run = ["sts", "get-caller-identity", "--output", "json"]
+read_only = true
+
+[cli.aws.commands.list_instances]
+description = "List EC2 instances, optionally filtered by Name tag."
+run = [
+  "ec2", "describe-instances",
+  "--region", "{region}",
+  "--filters", "Name=tag:Name,Values={name}",
+  "--query", "Reservations[].Instances[].{{id:InstanceId,name:Tags[?Key=='Name']|[0].Value,state:State.Name,type:InstanceType,ip:PrivateIpAddress}}",
+  "--output", "json",
+]
+# {{ and }} are literal braces (JMESPath); {region} and {name} are arguments.
+read_only = true
+args.region = { enum = ["ap-southeast-1", "us-east-1"], default = "ap-southeast-1" }
+args.name = { pattern = "[A-Za-z0-9*._-]{1,64}", default = "*", description = "Name tag, '*' wildcards allowed" }
+
+[cli.aws.commands.list_buckets]
+description = "List S3 buckets."
+run = ["s3api", "list-buckets", "--query", "Buckets[].Name", "--output", "json"]
+read_only = true
+
+[cli.aws.commands.tail_logs]
+description = "Recent CloudWatch log events of one service."
+run = ["logs", "tail", "/ecs/{service}", "--since", "{minutes}m", "--format", "short"]
+read_only = true
+args.service = { enum = ["api", "worker"] }
+args.minutes = { type = "integer", min = 1, max = 120, default = 15 }
