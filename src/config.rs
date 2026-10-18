@@ -456,7 +456,7 @@ fn build_command(
         return Err(at("needs_login = true but the cli has no [health] check".into()));
     }
 
-    let used = placeholders(&raw.run).map_err(|e| at(e))?;
+    let used = placeholders(&raw.run).map_err(at)?;
     for p in &used {
         if !raw.args.contains_key(p) {
             return Err(at(format!(
