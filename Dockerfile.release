@@ -1,0 +1,31 @@
+# Image for prebuilt release binaries (see .github/workflows/publish.yml).
+# The build context holds <arch>/mcp-cli, one per TARGETARCH.
+#
+# This image has no CLIs to wrap. Extend it with the ones your config uses:
+#   FROM ghcr.io/hyhilman/mcp-cli
+#   USER root
+#   RUN apt-get update && apt-get install -y --no-install-recommends awscli
+#   USER mcp-cli
+
+FROM debian:bookworm-slim
+
+ARG TARGETARCH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --shell /usr/sbin/nologin mcp-cli
+
+COPY ${TARGETARCH}/mcp-cli /usr/local/bin/mcp-cli
+
+USER mcp-cli
+WORKDIR /home/mcp-cli
+
+# Mount the config here. MCP_CLI_TOKEN is required for --http on 0.0.0.0.
+ENV MCP_CLI_CONFIG=/config/config.toml
+ENV MCP_CLI_LOG=info
+
+EXPOSE 8090
+
+ENTRYPOINT ["mcp-cli"]
+CMD ["serve", "--http", "0.0.0.0:8090"]
