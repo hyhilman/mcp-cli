@@ -186,8 +186,9 @@ fn spawn_event_publisher(states: &Arc<StateManager>, hub: Arc<EventHub>) {
     let states = states.clone();
     tokio::spawn(async move {
         loop {
-            let StateEvent::StateChanged { name, from, to } = match events.recv().await {
-                Ok(event) => event,
+            let (name, from, to) = match events.recv().await {
+                Ok(StateEvent::StateChanged { name, from, to }) => (name, from, to),
+                Ok(_) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             };

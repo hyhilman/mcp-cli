@@ -170,6 +170,7 @@ impl McpSession {
                     Ok(StateEvent::StateChanged { name, .. }) => {
                         let _ = changes.send(Change::ResourceUpdated(state_uri(&name)));
                     }
+                    Ok(_) => {}
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
