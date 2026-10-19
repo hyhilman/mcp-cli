@@ -88,3 +88,24 @@ pub(crate) fn mark_complete(value: &mut Value) {
             .or_insert_with(|| Value::String("complete".into()));
     }
 }
+
+/// Freshness for results fixed by the config file (tool and resource lists, discover).
+const STATIC_TTL_MS: u64 = 300_000;
+
+/// Add the `ttlMs` and `cacheScope` hints that 2026-07-28 requires on cacheable results.
+pub(crate) fn add_cache_hints(method: &str, value: &mut Value) {
+    // Lists come from the config and are the same for every caller, so "public".
+    // A state read holds live health and login data, so "private" and always stale.
+    let (ttl_ms, scope) = match method {
+        "server/discover" | "tools/list" | "resources/list" | "resources/templates/list" | "prompts/list" => {
+            (STATIC_TTL_MS, "public")
+        }
+        "resources/read" => (0, "private"),
+        _ => return,
+    };
+    if let Value::Object(obj) = value {
+        obj.entry("ttlMs").or_insert_with(|| Value::from(ttl_ms));
+        obj.entry("cacheScope")
+            .or_insert_with(|| Value::String(scope.into()));
+    }
+}

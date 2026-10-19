@@ -151,8 +151,13 @@ async fn discover_and_stateless_modern_requests() {
     );
     assert!(r["capabilities"]["resources"]["subscribe"].as_bool().unwrap());
 
+    assert_eq!(r["ttlMs"], 300_000);
+    assert_eq!(r["cacheScope"], "public");
+
     let r = ok(&session, request(2, "tools/list", Some(modern(json!({}), false)))).await;
     assert_eq!(r["resultType"], "complete");
+    assert_eq!(r["ttlMs"], 300_000);
+    assert_eq!(r["cacheScope"], "public");
 
     let params = json!({ "_meta": { "io.modelcontextprotocol/protocolVersion": "1900-01-01" } });
     let e = err(&session, request(3, "tools/list", Some(params))).await;
@@ -361,7 +366,40 @@ async fn login_tool_returns_link() {
     assert!(text(&r).contains("netbird_status"));
 }
 
+#[tokio::test]
+async fn legacy_replies_carry_no_cache_hints() {
+    let session = initialized(session_for("true", "true")).await;
+    for method in ["tools/list", "resources/list"] {
+        let r = ok(&session, request(2, method, None)).await;
+        assert!(
+            r.get("ttlMs").is_none() && r.get("cacheScope").is_none(),
+            "{method}: {r}"
+        );
+        assert!(r.get("resultType").is_none(), "{method}: {r}");
+    }
+}
+
 // ── resources & events ─────────────────────────────────────────────────
+
+#[tokio::test]
+async fn modern_resource_results_carry_cache_hints() {
+    let session = session_for("echo NeedsLogin", "true");
+    session.states.refresh("netbird").await.unwrap();
+
+    let r = ok(
+        &session,
+        request(1, "resources/list", Some(modern(json!({}), false))),
+    )
+    .await;
+    assert_eq!(r["resultType"], "complete");
+    assert_eq!(r["ttlMs"], 300_000);
+    assert_eq!(r["cacheScope"], "public");
+
+    let params = modern(json!({ "uri": "cli://netbird/state" }), false);
+    let r = ok(&session, request(2, "resources/read", Some(params))).await;
+    assert_eq!(r["ttlMs"], 0);
+    assert_eq!(r["cacheScope"], "private");
+}
 
 #[tokio::test]
 async fn state_is_readable_as_resource() {

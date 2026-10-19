@@ -10,7 +10,8 @@ use super::jsonrpc::{
     JsonRpcSuccessResponse,
 };
 use super::protocol::{
-    mark_complete, RequestCtx, LEGACY_PROTOCOL_VERSION, META_SERVER_INFO, MODERN_PROTOCOL_VERSIONS,
+    add_cache_hints, mark_complete, RequestCtx, LEGACY_PROTOCOL_VERSION, META_SERVER_INFO,
+    MODERN_PROTOCOL_VERSIONS,
 };
 use super::request_state::StateSigner;
 use crate::config::Config;
@@ -125,6 +126,7 @@ impl McpSession {
         if ctx.is_modern() {
             if let Ok(value) = &mut result {
                 mark_complete(value);
+                add_cache_hints(&request.method, value);
             }
         }
         result
