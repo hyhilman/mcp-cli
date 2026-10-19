@@ -271,7 +271,10 @@ impl Config {
                 }
             };
             for state in &n.on {
-                if !matches!(state.as_str(), "needs_login" | "down" | "ready") {
+                if !matches!(
+                    state.as_str(),
+                    "needs_login" | "down" | "ready" | "login_started" | "login_finished"
+                ) {
                     return Err(invalid(format!("[[notify]] #{}: unknown state '{state}'", i + 1)));
                 }
             }
@@ -500,9 +503,11 @@ fn build_command(
                             .map_err(|e| at(format!("arg '{arg_name}': bad pattern: {e}")))?;
                         ArgType::Pattern(p, re)
                     }
-                    _ => return Err(at(format!(
+                    _ => {
+                        return Err(at(format!(
                         "arg '{arg_name}': string args need exactly one of enum = [...] or pattern = \"...\""
-                    ))),
+                    )))
+                    }
                 }
             }
         };
@@ -665,6 +670,14 @@ mod tests {
         );
         assert!(cli.commands.iter().all(|c| c.needs_login));
         assert_eq!(config.notify[0].url, "https://hooks.slack.example/x");
+    }
+
+    #[test]
+    fn notify_accepts_login_events_and_rejects_unknown_names() {
+        let with_on = |on: &str| NETBIRD.replace(r#"on = ["needs_login"]"#, on);
+        let config = parse(&with_on(r#"on = ["login_started", "login_finished"]"#)).unwrap();
+        assert_eq!(config.notify[0].on, ["login_started", "login_finished"]);
+        assert!(parse(&with_on(r#"on = ["login_done"]"#)).is_err());
     }
 
     #[test]

@@ -126,6 +126,14 @@ pub enum StateEvent {
         from: CliState,
         to: CliState,
     },
+    /// `start_login` issued a new link (not a reused pending one).
+    LoginStarted {
+        name: String,
+        url: String,
+        message: String,
+    },
+    /// A login command ended and the CLI is ready.
+    LoginFinished { name: String },
 }
 
 #[derive(Debug, Clone)]
@@ -347,6 +355,11 @@ impl StateManager {
         };
         entry.status.lock().unwrap().login = Some(login.clone());
         tracing::info!(cli = %name, url = %login.url, "login link issued; waiting for user");
+        let _ = self.events.send(StateEvent::LoginStarted {
+            name: name.to_string(),
+            url: login.url.clone(),
+            message: login.message.clone(),
+        });
 
         let manager = Arc::clone(self);
         let name = name.to_string();
@@ -368,8 +381,12 @@ impl StateManager {
             if let Ok(entry) = manager.entry(&name) {
                 entry.status.lock().unwrap().login = None;
             }
-            if let Err(e) = manager.refresh(&name).await {
-                tracing::warn!(cli = %name, %e, "health check after login failed");
+            match manager.refresh(&name).await {
+                Ok(status) if status.state == CliState::Ready => {
+                    let _ = manager.events.send(StateEvent::LoginFinished { name });
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(cli = %name, %e, "health check after login failed"),
             }
         });
 
@@ -697,17 +714,81 @@ mod tests {
         assert_eq!(again.url, login.url);
 
         let event = loop {
-            let StateEvent::StateChanged { to, .. } =
-                tokio::time::timeout(Duration::from_secs(5), events.recv())
-                    .await
-                    .unwrap()
-                    .unwrap();
-            if to == CliState::Ready {
-                break to;
+            let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if let StateEvent::StateChanged { to, .. } = event {
+                if to == CliState::Ready {
+                    break to;
+                }
             }
         };
         assert_eq!(event, CliState::Ready);
         assert!(m.status("netbird").unwrap().login.is_none());
+    }
+
+    #[tokio::test]
+    async fn login_events_fire_once_per_new_link_and_on_ready() {
+        let dir = std::env::temp_dir().join(format!("mcp-cli-state-{}", now_unix_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let flag = dir.join("logged-in");
+        let flag = flag.display();
+
+        let m = StateManager::new(vec![def(
+            &format!("test -f {flag} && echo 'Management: Connected' || echo NeedsLogin"),
+            &format!("echo 'Please log in: https://idp.example/device'; echo 'Code: ABCD-1234'; sleep 1; touch {flag}"),
+        )]);
+        let mut events = m.subscribe();
+
+        m.start_login("netbird").await.unwrap();
+        m.start_login("netbird").await.unwrap();
+
+        let mut started = Vec::new();
+        let mut finished = 0;
+        loop {
+            let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            match event {
+                StateEvent::LoginStarted { name, url, message } => started.push((name, url, message)),
+                StateEvent::LoginFinished { name } => {
+                    assert_eq!(name, "netbird");
+                    finished += 1;
+                    break;
+                }
+                StateEvent::StateChanged { .. } => {}
+            }
+        }
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0].1, "https://idp.example/device");
+        assert!(started[0].2.contains("ABCD-1234"));
+        assert_eq!(finished, 1);
+    }
+
+    #[tokio::test]
+    async fn login_that_does_not_reach_ready_emits_no_finished() {
+        let m = StateManager::new(vec![def(
+            "echo NeedsLogin",
+            "echo 'Please log in: https://idp.example/device'; sleep 1",
+        )]);
+        let mut events = m.subscribe();
+        m.start_login("netbird").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(2500)).await;
+        while let Ok(event) = events.try_recv() {
+            assert!(!matches!(event, StateEvent::LoginFinished { .. }));
+        }
+    }
+
+    #[tokio::test]
+    async fn already_ready_login_emits_no_login_events() {
+        let m = StateManager::new(vec![def("echo 'Management: Connected'", "exit 1")]);
+        let mut events = m.subscribe();
+        m.start_login("netbird").await.unwrap();
+        while let Ok(event) = events.try_recv() {
+            assert!(matches!(event, StateEvent::StateChanged { .. }));
+        }
     }
 
     #[tokio::test]

@@ -63,6 +63,20 @@ on = ["needs_login", "ready"]
 
 With `auto = true` the alert contains the sign-in link (ntfy: tap to open).
 
+To get a push only when an agent asks for a login, use `auto = false` and the
+login events:
+
+```toml
+[[notify]]
+kind = "ntfy"
+url = "https://ntfy.sh/my-private-topic"
+on = ["login_started", "login_finished"]
+```
+
+`login_started` carries the link and device code. `login_finished` fires when
+the login ends and NetBird is ready. With `auto = true`, `on` should not hold
+both `needs_login` and `login_started`: that sends two pushes for each expiry.
+
 ## Using it behind headless-mcp
 
 ```toml

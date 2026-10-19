@@ -77,7 +77,7 @@ args.network = { enum = ["office", "staging"], description = "..." }
 [[notify]]                     # optional alerts
 kind = "slack"                 # slack | ntfy | webhook
 url_env = "SLACK_WEBHOOK_URL"  # or url = "..."
-on = ["needs_login", "ready"]  # needs_login | down | ready
+on = ["needs_login", "ready"]  # needs_login | down | ready | login_started | login_finished
 cli = ["netbird"]              # default: all
 
 [events]                       # optional MCP Events (signed webhooks)
@@ -86,6 +86,38 @@ enabled = true
 include_login_url = false
 allow_insecure_callbacks = false
 ```
+
+### Alerts
+
+`on` lists the events that send an alert. Default: `needs_login`, `down`, `ready`.
+
+| Event | When it fires |
+|---|---|
+| `needs_login` | The CLI state changed to needs-login. |
+| `down` | The CLI state changed to down. |
+| `ready` | The CLI state changed to ready (not for the first check at startup). |
+| `login_started` | Someone asked for a login and a new link was issued. The alert has the link and the device code. It does not fire when a login is already pending or the CLI is already ready. |
+| `login_finished` | A login ended and the CLI is ready. |
+
+To get a push only when an agent asks for a login, turn off auto-login and
+listen for the two login events:
+
+```toml
+[cli.netbird.login]
+auto = false
+
+[[notify]]
+kind = "ntfy"
+url = "https://ntfy.sh/my-private-topic"
+on = ["login_started", "login_finished"]
+```
+
+With `auto = true`, the server starts the login itself when the CLI needs a
+login. That also fires `login_started`. If `on` has both `needs_login` and
+`login_started`, you get two pushes for each expiry.
+
+A webhook body has `cli`, `event`, `login_url`, `message`. State changes also
+have `from` and `to`. `event` is the new state name or the login event name.
 
 ### Arguments
 
